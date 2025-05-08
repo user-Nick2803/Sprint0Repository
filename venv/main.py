@@ -1,16 +1,20 @@
-from typing import Final
 import os
 import re 
 import discord
+import openai
+from typing import Final
+from ui import DropdownMenu
 from dotenv import load_dotenv
 from discord import Intents, Client, Message
-import openai
 from responses import get_response, is_greeting_message
 
 load_dotenv()
 TOKEN: Final[str] = os.getenv('DISCORD_TOKEN')
 OPENAI_API_KEY: Final[str] = os.getenv('OPENAI_API_KEY')  # Load OpenAI API key
 
+# Keep track of who’s seen the view
+greeted_users = set()    
+    
 # Initialize OpenAI API
 openai.api_key = OPENAI_API_KEY
 
@@ -56,7 +60,7 @@ async def on_ready() -> None:
 @client.event
 async def on_message(message: Message) -> None:
     # Ignore messages from the bot itself.
-    if message.author == client.user:
+    if message.author.bot:
         return
 
     # Check if the message is a DM (message.guild is None)
@@ -65,8 +69,8 @@ async def on_message(message: Message) -> None:
         await send_message(message, message.content)
         return
 
-    # Restrict bot responses to the "bot-testing" channel in a guild.
-    if not hasattr(message.channel, 'name') or message.channel.name != "bot-testing":
+    # only in #bot-testing channel
+    if not getattr(message.channel, "name", "") == "bot-testing":
         return
 
     # Use the original message content to check for greetings anywhere.
@@ -74,9 +78,36 @@ async def on_message(message: Message) -> None:
     is_greeting = is_greeting_message(content)
     is_mentioned = client.user in message.mentions
 
-    # Only respond if there's a greeting anywhere in the message or if the bot is mentioned.
+    # The bot should only respond when mentioned or greeted to
     if not is_greeting and not is_mentioned:
         return
+    
+    # Give user the dropdown menu after greeting
+    #if (is_greeting or is_mentioned) and message.author.id not in greeted_users:
+    #    view = DropdownMenu()
+    #    await message.channel.send(
+    #        f"Hello {message.author.mention}! This is the Rowan Chatbot, built to answer important questions regarding Rowan University. "
+    #        "Please keep questions within the context of Rowan, and if you run into any issues, please fill out "
+    #        "the survey in the dropdown menu below. How can I help you?",
+    #        view=view
+    #    )
+    #    greeted_users.add(message.author.id)
+    #    return
+    
+    if (is_greeting or is_mentioned):
+        view = DropdownMenu()
+        await message.channel.send(
+            f"Hello {message.author.mention}! This is the Rowan Chatbot, built to answer important questions regarding Rowan University. "
+            "Please keep questions within the context of Rowan, and if you run into any issues, please fill out "
+            "the survey in the dropdown menu below. How can I help you?",
+            view=view
+        )
+        greeted_users.add(message.author.id)
+        return
+    
+    # Checks to see if the user has already be greeted
+    is_mention  = client.user.mentioned_in(message)
+    is_greeting = is_greeting_message(message.content)
 
     print(message.content)
     await send_message(message, message.content)
